@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Infraestructura de Asesores TI en AWS
+
+
+Parameters:
+ KeyName:
+   Type: AWS::EC2::KeyPair::KeyName
+   Description: Nombre de la clave SSH para acceso a la instancia EC2
+
+
+Resources:
+ VPC:
+   Type: AWS::EC2::VPC
+   Properties:
+     CidrBlock: 10.0.0.0/22
+     EnableDnsSupport: true
+     EnableDnsHostnames: true
+
+
+ InternetGateway:
+   Type: AWS::EC2::InternetGateway
+
+
+ AttachGateway:
+   Type: AWS::EC2::VPCGatewayAttachment
+   Properties:
+     VpcId: !Ref VPC
+     InternetGatewayId: !Ref InternetGateway
+
+
+ PublicSubnet:
+   Type: AWS::EC2::Subnet
+   Properties:
+     VpcId: !Ref VPC
+     CidrBlock: 10.0.0.0/24
+     MapPublicIpOnLaunch: true
+
+
+ RouteTable:
+   Type: AWS::EC2::RouteTable
+   Properties:
+     VpcId: !Ref VPC
+
+
+ Route:
+   Type: AWS::EC2::Route
+   DependsOn: AttachGateway
+   Properties:
+     RouteTableId: !Ref RouteTable
+     DestinationCidrBlock: 0.0.0.0/0
+     GatewayId: !Ref InternetGateway
+
+
+ SubnetRouteTableAssociation:
+   Type: AWS::EC2::SubnetRouteTableAssociation
+   Properties:
+     SubnetId: !Ref PublicSubnet
+     RouteTableId: !Ref RouteTable
+
+
+ WebServerSecurityGroup:
+   Type: AWS::EC2::SecurityGroup
+   Properties:
+     GroupDescription: Security group for web server
+     SecurityGroupIngress:
+       - IpProtocol: tcp
+         FromPort: '80'
+         ToPort: '80'
+         CidrIp: 0.0.0.0/0   # Permitir acceso HTTP desde cualquier lugar
+     VpcId: !Ref VPC
+
+
+ EC2Instance:
+   Type: AWS::EC2::Instance
+   Properties:
+     InstanceType: t2.micro
+     KeyName: !Ref KeyName
+     ImageId: ami-09040d770ffe2224f 
+     SecurityGroupIds:
+       - !Ref WebServerSecurityGroup
+     SubnetId: !Ref PublicSubnet
+     UserData:
+       Fn::Base64: !Sub |
+         #!/bin/bash -xe
+         apt-get update -y
+         apt-get install -y apache2 git
+
+
+         # Clonar el repositorio
+         git clone https://github.com/Jhonchuri11/Desarrollo_Web.git /var/www/html/
+
+
+         # Cambiar propietario y permisos de los archivos en /var/www/html/
+         chown -R www-data:www-data /var/www/html/
+         chmod -R 755 /var/www/html/
+
+
+         # Reiniciar el servicio de Apache
+         systemctl restart apache2
